@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="24A335" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="false" userDefinedModelVersionIdentifier="">
+    <entity name="Agency" representedClassName="Agency" syncable="YES" codeGenerationType="class">
+        <attribute name="agency_email" optional="YES" attributeType="String"/>
+        <attribute name="agency_fare_url" optional="YES" attributeType="String"/>
+        <attribute name="agency_id" optional="YES" attributeType="String"/>
+        <attribute name="agency_lang" optional="YES" attributeType="String"/>
+        <attribute name="agency_name" optional="YES" attributeType="String"/>
+        <attribute name="agency_phone" optional="YES" attributeType="String"/>
+        <attribute name="agency_timezone" optional="YES" attributeType="String"/>
+        <attribute name="agency_url" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Calendar" representedClassName="GTFSCalendar" syncable="YES" codeGenerationType="class">
+        <attribute name="end_date" optional="YES" attributeType="String"/>
+        <attribute name="friday" optional="YES" attributeType="String"/>
+        <attribute name="monday" optional="YES" attributeType="String"/>
+        <attribute name="saturday" optional="YES" attributeType="String"/>
+        <attribute name="service_id" optional="YES" attributeType="String"/>
+        <attribute name="start_date" optional="YES" attributeType="String"/>
+        <attribute name="sunday" optional="YES" attributeType="String"/>
+        <attribute name="thursday" optional="YES" attributeType="String"/>
+        <attribute name="tuesday" optional="YES" attributeType="String"/>
+        <attribute name="wednesday" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="CalendarDate" representedClassName="CalendarDate" syncable="YES" codeGenerationType="class">
+        <attribute name="date" optional="YES" attributeType="String"/>
+        <attribute name="exception_type" optional="YES" attributeType="String"/>
+        <attribute name="service_id" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Level" representedClassName="Level" syncable="YES" codeGenerationType="class">
+        <attribute name="level_id" optional="YES" attributeType="String"/>
+        <attribute name="level_index" optional="YES" attributeType="String"/>
+        <attribute name="level_name" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Pathway" representedClassName="Pathway" syncable="YES" codeGenerationType="class">
+        <attribute name="from_stop_id" optional="YES" attributeType="String"/>
+        <attribute name="is_bidirectional" optional="YES" attributeType="String"/>
+        <attribute name="length" optional="YES" attributeType="String"/>
+        <attribute name="max_slope" optional="YES" attributeType="String"/>
+        <attribute name="min_width" optional="YES" attributeType="String"/>
+        <attribute name="pathway_id" optional="YES" attributeType="String"/>
+        <attribute name="pathway_mode" optional="YES" attributeType="String"/>
+        <attribute name="reversed_signposted_as" optional="YES" attributeType="String"/>
+        <attribute name="signposted_as" optional="YES" attributeType="String"/>
+        <attribute name="stair_count" optional="YES" attributeType="String"/>
+        <attribute name="to_stop_id" optional="YES" attributeType="String"/>
+        <attribute name="traversal_time" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Route" representedClassName="Route" syncable="YES" codeGenerationType="class">
+        <attribute name="agency_id" optional="YES" attributeType="String"/>
+        <attribute name="continuous_drop_off" optional="YES" attributeType="String"/>
+        <attribute name="continuous_pickup" optional="YES" attributeType="String"/>
+        <attribute name="network_id" optional="YES" attributeType="String"/>
+        <attribute name="route_color" optional="YES" attributeType="String"/>
+        <attribute name="route_desc" optional="YES" attributeType="String"/>
+        <attribute name="route_id" optional="YES" attributeType="String"/>
+        <attribute name="route_long_name" optional="YES" attributeType="String"/>
+        <attribute name="route_short_name" optional="YES" attributeType="String"/>
+        <attribute name="route_sort_order" optional="YES" attributeType="String"/>
+        <attribute name="route_text_color" optional="YES" attributeType="String"/>
+        <attribute name="route_type" optional="YES" attributeType="String"/>
+        <attribute name="route_url" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="ShapePoint" representedClassName="ShapePoint" syncable="YES" codeGenerationType="class">
+        <attribute name="shape_dist_traveled" optional="YES" attributeType="String"/>
+        <attribute name="shape_id" optional="YES" attributeType="String"/>
+        <attribute name="shape_pt_lat" optional="YES" attributeType="String"/>
+        <attribute name="shape_pt_lon" optional="YES" attributeType="String"/>
+        <attribute name="shape_pt_sequence" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Stop" representedClassName="Stop" syncable="YES" codeGenerationType="class">
+        <attribute name="level_id" optional="YES" attributeType="String"/>
+        <attribute name="location_type" optional="YES" attributeType="String"/>
+        <attribute name="parent_station" optional="YES" attributeType="String"/>
+        <attribute name="platform_code" optional="YES" attributeType="String"/>
+        <attribute name="stop_code" optional="YES" attributeType="String"/>
+        <attribute name="stop_desc" optional="YES" attributeType="String"/>
+        <attribute name="stop_id" optional="YES" attributeType="String"/>
+        <attribute name="stop_lat" optional="YES" attributeType="String"/>
+        <attribute name="stop_lon" optional="YES" attributeType="String"/>
+        <attribute name="stop_name" optional="YES" attributeType="String"/>
+        <attribute name="stop_timezone" optional="YES" attributeType="String"/>
+        <attribute name="stop_url" optional="YES" attributeType="String"/>
+        <attribute name="tts_stop_name" optional="YES" attributeType="String"/>
+        <attribute name="wheelchair_boarding" optional="YES" attributeType="String"/>
+        <attribute name="zone_id" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="StopTime" representedClassName="StopTime" syncable="YES" codeGenerationType="class">
+        <attribute name="arrival_time" optional="YES" attributeType="String"/>
+        <attribute name="continuous_drop_off" optional="YES" attributeType="String"/>
+        <attribute name="continuous_pickup" optional="YES" attributeType="String"/>
+        <attribute name="departure_time" optional="YES" attributeType="String"/>
+        <attribute name="drop_off_type" optional="YES" attributeType="String"/>
+        <attribute name="pickup_type" optional="YES" attributeType="String"/>
+        <attribute name="shape_dist_traveled" optional="YES" attributeType="String"/>
+        <attribute name="stop_headsign" optional="YES" attributeType="String"/>
+        <attribute name="stop_id" optional="YES" attributeType="String"/>
+        <attribute name="stop_sequence" optional="YES" attributeType="String"/>
+        <attribute name="timepoint" optional="YES" attributeType="String"/>
+        <attribute name="trip_id" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Trip" representedClassName="Trip" syncable="YES" codeGenerationType="class">
+        <attribute name="bikes_allowed" optional="YES" attributeType="String"/>
+        <attribute name="block_id" optional="YES" attributeType="String"/>
+        <attribute name="direction_id" optional="YES" attributeType="String"/>
+        <attribute name="route_id" optional="YES" attributeType="String"/>
+        <attribute name="service_id" optional="YES" attributeType="String"/>
+        <attribute name="shape_id" optional="YES" attributeType="String"/>
+        <attribute name="trip_headsign" optional="YES" attributeType="String"/>
+        <attribute name="trip_id" optional="YES" attributeType="String"/>
+        <attribute name="trip_short_name" optional="YES" attributeType="String"/>
+        <attribute name="wheelchair_accessible" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="ImportState" representedClassName="ImportState" syncable="YES" codeGenerationType="class">
+        <attribute name="datasetVersion" optional="YES" attributeType="String"/>
+        <attribute name="identifier" optional="YES" attributeType="String"/>
+        <attribute name="importedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <elements>
+        <element name="Agency" positionX="-360" positionY="-468" width="128" height="164"/>
+        <element name="Calendar" positionX="-176" positionY="-468" width="128" height="200"/>
+        <element name="CalendarDate" positionX="16" positionY="-468" width="128" height="104"/>
+        <element name="Level" positionX="200" positionY="-468" width="128" height="104"/>
+        <element name="Pathway" positionX="384" positionY="-468" width="128" height="236"/>
+        <element name="Route" positionX="-360" positionY="-188" width="128" height="254"/>
+        <element name="ShapePoint" positionX="-176" positionY="-188" width="128" height="140"/>
+        <element name="Stop" positionX="16" positionY="-188" width="128" height="290"/>
+        <element name="StopTime" positionX="200" positionY="-188" width="128" height="236"/>
+        <element name="Trip" positionX="384" positionY="-188" width="128" height="200"/>
+        <element name="ImportState" positionX="576" positionY="-188" width="128" height="104"/>
+    </elements>
+</model>

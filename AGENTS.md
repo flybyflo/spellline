@@ -1,0 +1,1 @@
+minimum app target is ios26.4 so no if iso 26 guards required

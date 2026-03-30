@@ -1,0 +1,24 @@
+# Xcode user/local state
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+DerivedData/
+build/
+.build/
+
+# Packaged/debug artifacts
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# macOS junk
+.DS_Store
+
+# Secrets / local config
+.env
+*.p12
+*.mobileprovision
+Config/Secrets.xcconfig
+Spellline/preloaded_store/spellline.sqlite
+gtfs_data
