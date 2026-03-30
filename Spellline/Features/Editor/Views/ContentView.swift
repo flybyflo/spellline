@@ -5,26 +5,30 @@ struct ContentView: View {
     @State private var store = PromptDocumentStore()
 
     var body: some View {
-        GeometryReader { geometry in
-            let editorContentWidth = max(0, geometry.size.width - LayoutMetrics.screenPadding * 2)
-            let metrics = LayoutMetrics(editorContentWidth: editorContentWidth)
+        ZStack {
+            AppBackground()
 
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
-                        PromptComposer(store: store, metrics: metrics)
+            GeometryReader { geometry in
+                let editorContentWidth = max(0, geometry.size.width - LayoutMetrics.screenPadding * 2)
+                let metrics = LayoutMetrics(editorContentWidth: editorContentWidth)
+
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+                            PromptComposer(store: store, metrics: metrics)
+                        }
+                        .frame(
+                            width: max(0, geometry.size.width - (metrics.screenPadding * 2)),
+                            alignment: .leading
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(metrics.screenPadding)
                     }
-                    .frame(
-                        width: max(0, geometry.size.width - (metrics.screenPadding * 2)),
-                        alignment: .leading
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(metrics.screenPadding)
+                    .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
+                    .navigationTitle("Spellline")
+                    .toolbarBackground(.hidden, for: .navigationBar)
                 }
-                .scrollIndicators(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-                .background(AppBackground())
-                .navigationTitle("Spellline")
             }
         }
     }
@@ -74,7 +78,14 @@ private struct PromptComposer: View {
     }
 }
 
-#Preview("Spellline") {
+#Preview("Light") {
     ContentView()
         .frame(width: 393, height: 852)
+        .preferredColorScheme(.light)
+}
+
+#Preview("Dark") {
+    ContentView()
+        .frame(width: 393, height: 852)
+        .preferredColorScheme(.dark)
 }

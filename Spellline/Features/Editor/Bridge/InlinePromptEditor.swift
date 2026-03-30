@@ -120,6 +120,19 @@ struct InlinePromptEditor: UIViewRepresentable {
             if replacement.isEmpty,
                storageRange.length == 1,
                let tokenID = snapshot.tokenHits[storageRange.location] {
+                if let token = store.document.tokens.first(where: { $0.id == tokenID }),
+                   token.kind == .station,
+                   token.plainRange.length > 0 {
+                    let deleteRange = NSRange(
+                        location: token.plainRange.location + token.plainRange.length - 1,
+                        length: 1
+                    )
+                    store.applyEdit(plainRange: deleteRange, replacementText: "")
+                    refreshEditor(animated: false, fallbackCaret: max(0, storageRange.location - 1))
+                    inlineTextView.typingAttributes = defaultTypingAttributes
+                    return false
+                }
+
                 store.removeToken(id: tokenID)
                 refreshEditor(animated: true, fallbackCaret: storageRange.location)
                 return false
@@ -127,7 +140,11 @@ struct InlinePromptEditor: UIViewRepresentable {
 
             let plainRange = snapshot.mapStorageRangeToPlain(storageRange)
             store.applyEdit(plainRange: plainRange, replacementText: replacement)
-            refreshEditor(animated: true, fallbackCaret: storageRange.location + (replacement as NSString).length)
+            let isBackspaceDelete = replacement.isEmpty && storageRange.length > 0
+            refreshEditor(
+                animated: !isBackspaceDelete,
+                fallbackCaret: storageRange.location + (replacement as NSString).length
+            )
 
             inlineTextView.typingAttributes = defaultTypingAttributes
             return false

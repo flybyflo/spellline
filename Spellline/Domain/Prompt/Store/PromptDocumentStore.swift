@@ -108,8 +108,17 @@ final class PromptDocumentStore {
         let autoAccepted = unresolved.filter { candidate in
             candidate.confidence >= autoAcceptConfidence && !candidate.commitsOnDelimiter
         }
-        if !autoAccepted.isEmpty {
-            nextTokens.append(contentsOf: autoAccepted.map(makeToken(from:)))
+        let stationLivePreviews = unresolved.filter { candidate in
+            candidate.kind == .station && candidate.confidence >= autoAcceptConfidence
+        }
+
+        var seenMaterializedCandidateIDs: Set<UUID> = []
+        let candidatesToMaterialize = (autoAccepted + stationLivePreviews).filter { candidate in
+            seenMaterializedCandidateIDs.insert(candidate.id).inserted
+        }
+
+        if !candidatesToMaterialize.isEmpty {
+            nextTokens.append(contentsOf: candidatesToMaterialize.map(makeToken(from:)))
             let secondPass = reconcileTokens(existing: nextTokens, with: resolved)
             nextTokens = secondPass.tokens
         }
