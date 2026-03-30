@@ -140,9 +140,8 @@ struct InlinePromptEditor: UIViewRepresentable {
 
             let plainRange = snapshot.mapStorageRangeToPlain(storageRange)
             store.applyEdit(plainRange: plainRange, replacementText: replacement)
-            let isBackspaceDelete = replacement.isEmpty && storageRange.length > 0
             refreshEditor(
-                animated: !isBackspaceDelete,
+                animated: false,
                 fallbackCaret: storageRange.location + (replacement as NSString).length
             )
 
@@ -295,7 +294,7 @@ final class InlineTokenTextView: UITextView {
         for presentation in currentSnapshot.presentations {
             guard let view = tokenViews[presentation.token.id] else { continue }
             let isNearCaret = presentation.storageLocation == caretLocation || presentation.storageLocation + 1 == caretLocation
-            view.setFocus(isNearCaret || isFirstResponder == false, animated: true)
+            view.setFocus(isNearCaret || isFirstResponder == false, animated: false)
         }
     }
 
