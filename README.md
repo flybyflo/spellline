@@ -2,7 +2,7 @@
 
 **Spellline** is an iPhone app for drafting prompts: as you type, matching phrases become inline controls—sliders, steppers, menus, toggles, and more—so you can tune a prompt without leaving the sentence.
 
-![Spellline running in the iOS Simulator](simulator_screenshot.png)
+<img src="simulator_screenshot.png" width="400" alt="Spellline running in the iOS Simulator">
 
 ## Requirements
 
