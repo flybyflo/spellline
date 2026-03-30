@@ -886,8 +886,10 @@ private final class InlineStationTokenView: InlineTokenControlView {
     private let iconView = UIImageView()
     private let menuButton = UIButton(type: .system)
     private let typedLabel = UILabel()
+    private let cursorLabel = UILabel()
     private let predictedLabel = UILabel()
     private let labelStack = UIStackView()
+    private var isCaretFocused = false
 
     override init(
         token: InlineToken,
@@ -905,13 +907,26 @@ private final class InlineStationTokenView: InlineTokenControlView {
 
         labelStack.axis = .horizontal
         labelStack.alignment = .center
-        labelStack.spacing = 0
+        labelStack.spacing = 3
         labelStack.isUserInteractionEnabled = false
         labelStack.addArrangedSubview(typedLabel)
+        labelStack.addArrangedSubview(cursorLabel)
         labelStack.addArrangedSubview(predictedLabel)
+        labelStack.setCustomSpacing(4, after: cursorLabel)
 
         typedLabel.font = InlineBadgeTypography.badgeFont(metrics: metrics)
-        predictedLabel.font = InlineBadgeTypography.badgeFont(metrics: metrics)
+        predictedLabel.font = UIFont.systemFont(ofSize: max(12, metrics.inlineControlFontSize - 1), weight: .bold)
+        cursorLabel.font = UIFont.monospacedSystemFont(ofSize: max(10, metrics.inlineControlFontSize - 5), weight: .semibold)
+        cursorLabel.text = "│"
+        cursorLabel.textAlignment = .center
+        cursorLabel.layer.cornerRadius = 5
+        cursorLabel.layer.masksToBounds = true
+        cursorLabel.setContentHuggingPriority(.required, for: .horizontal)
+        cursorLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        cursorLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            cursorLabel.widthAnchor.constraint(equalToConstant: max(8, metrics.inlineControlFontSize - 5))
+        ])
         typedLabel.lineBreakMode = .byClipping
         predictedLabel.lineBreakMode = .byTruncatingTail
 
@@ -967,8 +982,15 @@ private final class InlineStationTokenView: InlineTokenControlView {
         typedLabel.textColor = token.uiTint.withAlphaComponent(0.95)
         predictedLabel.text = display.predicted
         predictedLabel.textColor = token.uiTint.withAlphaComponent(0.45)
+        applyCursorStyling(tint: token.uiTint)
 
         configureMenu()
+    }
+
+    override func setFocus(_ focused: Bool, animated: Bool) {
+        super.setFocus(focused, animated: animated)
+        isCaretFocused = focused
+        applyCursorStyling(tint: token.uiTint)
     }
 
     private func configureMenu() {
@@ -1007,6 +1029,12 @@ private final class InlineStationTokenView: InlineTokenControlView {
             return (String(resolved[..<splitIndex]), String(resolved[splitIndex...]))
         }
         return (typed, resolved.caseInsensitiveCompare(typed) == .orderedSame ? "" : " → \(resolved)")
+    }
+
+    private func applyCursorStyling(tint: UIColor) {
+        cursorLabel.isHidden = !isCaretFocused
+        cursorLabel.textColor = tint.withAlphaComponent(isCaretFocused ? 0.92 : 0.5)
+        cursorLabel.backgroundColor = tint.withAlphaComponent(isCaretFocused ? 0.18 : 0.1)
     }
 }
 

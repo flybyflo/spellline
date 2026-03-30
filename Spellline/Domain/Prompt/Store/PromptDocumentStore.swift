@@ -74,7 +74,10 @@ final class PromptDocumentStore {
         updateRejectedDismissalsForEdit(safeRange: safeRange, replacementText: replacementText, delta: delta)
 
         document.tokens.removeAll { token in
-            NSIntersectionRange(token.plainRange, safeRange).length > 0
+            let intersects = NSIntersectionRange(token.plainRange, safeRange).length > 0
+            // Keep station tokens during in-place typing edits so reconcile can preserve token identity.
+            // This prevents station badge teardown/recreation flicker on each keystroke.
+            return intersects && token.kind != .station
         }
 
         for index in document.tokens.indices {
