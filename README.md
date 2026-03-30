@@ -38,6 +38,8 @@ Spellline/
     …
 ```
 
+Currently the GTFS data is required for building the project.
+
 That folder is listed in `.gitignore`, so local GTFS files stay out of git. The dataset is published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (see the license block on the ÖBB page).
 
 ## License
