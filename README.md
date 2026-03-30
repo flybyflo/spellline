@@ -2,6 +2,8 @@
 
 **Spellline** is an iPhone app for drafting prompts: as you type, matching phrases become inline controls—sliders, steppers, menus, toggles, and more—so you can tune a prompt without leaving the sentence.
 
+It is a **UI/UX prototype** for trying out and evaluating this form of interaction—inline, in-flow controls tied to natural language. The plan is to carry what works into **real products** where people interact with **AI-based prompting**: assistants, copilots, and similar flows, so those experiences can feel clearer, faster, and more direct than plain text boxes alone.
+
 <img src="simulator_screenshot.png" width="400" alt="Spellline running in the iOS Simulator">
 
 ## Requirements
@@ -14,6 +16,15 @@
 1. Open `Spellline.xcodeproj` in Xcode.
 2. Select an iPhone simulator or device.
 3. Build and run (**⌘R**).
+
+## Project structure
+
+- `Spellline/Features/Editor/` — editor screen view, UIKit bridge, layout metrics, and background styling.
+- `Spellline/Features/InlineTokens/Core/` — inline token UIKit/SwiftUI control implementations (stepper, slider, menus, clock wheel).
+- `Spellline/Domain/Prompt/Models/` — prompt domain model types.
+- `Spellline/Domain/Prompt/Snapshot/` — rendered snapshot and sizing helpers for inline token presentation.
+- `Spellline/Domain/Prompt/Matching/` — prompt matching heuristics and station search index.
+- `Spellline/Domain/Prompt/Store/` — observable prompt document store/state transitions.
 
 ## GTFS schedule data (ÖBB)
 
