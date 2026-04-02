@@ -202,22 +202,30 @@ struct HeuristicPromptMatcher: PromptMatching {
                 guard let role = StationRole(rawValue: roleRaw) else { continue }
 
                 let capturedQuery = nsText.substring(with: queryRange)
-                let rawQuery = capturedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Leading trim only: trailing spaces must stay in-range or they render as plain text after the badge.
+                let rawQuery = capturedQuery.trimmingLeadingWhitespaceForStationQuery
                 guard rawQuery.count >= 1 else { continue }
 
                 guard let stationMatch = bestStationMatch(for: rawQuery, role: role) else { continue }
                 let best = stationMatch.name
 
-                let nsCaptured = capturedQuery as NSString
-                let localRange = nsCaptured.range(of: stationMatch.consumedQuery, options: [.anchored, .caseInsensitive])
-                guard localRange.location != NSNotFound else { continue }
-                let stationRange = NSRange(
-                    location: queryRange.location + localRange.location,
-                    length: localRange.length
-                )
+                // Use the full regex capture for the token range. `consumedQuery` is normalized (no trailing
+                // space) for lookup; mapping it back with `range(of:)` would shorten the range and drop
+                // trailing spaces the user typed inside the station field.
+                var stationRange = queryRange
+                let capturedFull = nsText.substring(with: stationRange)
+                if let truncated = stationQueryRangeTruncatedIfUniqueMatchCompleted(
+                    queryRange: stationRange,
+                    canonicalName: best,
+                    captured: capturedFull,
+                    optionCount: stationMatch.optionCount
+                ) {
+                    stationRange = truncated
+                }
                 let stationMatchedText = nsText.substring(with: stationRange)
                 let confidence: Double = best.caseInsensitiveCompare(stationMatch.consumedQuery) == .orderedSame ? 1 : 0.98
-                let autoAccept = stationMatch.optionCount == 1 ||
+
+                let autoAccept =
                     shouldAutoAcceptStation(in: text, queryRange: stationRange, capturedQuery: stationMatchedText)
 
                 results.append(
@@ -375,17 +383,15 @@ struct HeuristicPromptMatcher: PromptMatching {
 
         let words = normalizedQuery.split(separator: " ").map(String.init)
         var candidates: [String] = []
+
         for count in stride(from: words.count, through: 1, by: -1) {
-            candidates.append(words.prefix(count).joined(separator: " "))
-        }
-        // Character-prefix fallback keeps the station badge alive through transient typo states
-        // while users are correcting input (e.g. "wiee" -> backspace -> "wien").
-        let chars = Array(normalizedQuery)
-        for charCount in stride(from: chars.count, through: 1, by: -1) {
-            let candidate = String(chars.prefix(charCount))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !candidate.isEmpty {
-                candidates.append(candidate)
+            let base = words.prefix(count).joined(separator: " ")
+            appendStationCandidate(base, to: &candidates)
+            if !base.isEmpty {
+                appendStationCandidate(String(base.dropLast(1)), to: &candidates)
+                if base.count >= 2 {
+                    appendStationCandidate(String(base.dropLast(2)), to: &candidates)
+                }
             }
         }
 
@@ -408,82 +414,167 @@ struct HeuristicPromptMatcher: PromptMatching {
         return fuzzyFallback
     }
 
+    private func appendStationCandidate(_ raw: String, to list: inout [String]) {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        if !list.contains(value) {
+            list.append(value)
+        }
+    }
+
     private func isStrongStationPrefixMatch(query: String, stationName: String) -> Bool {
         let normalizedQuery = query.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         let normalizedStation = stationName.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
         return normalizedStation.hasPrefix(normalizedQuery)
     }
 
+    /// When a unique station match is complete and the regex capture still extends past the canonical name
+    /// (e.g. user typed another letter with no delimiter), shrink the candidate range so following text stays plain.
+    private func stationQueryRangeTruncatedIfUniqueMatchCompleted(
+        queryRange: NSRange,
+        canonicalName: String,
+        captured: String,
+        optionCount: Int
+    ) -> NSRange? {
+        guard optionCount == 1 else { return nil }
+        let foldedBest = canonicalName.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        let foldedCaptured = captured.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        guard !foldedBest.isEmpty,
+              foldedCaptured.hasPrefix(foldedBest),
+              foldedCaptured.count > foldedBest.count else { return nil }
+
+        let endIndex = stationOriginalIndex(afterFoldedPrefixLength: foldedBest.count, in: captured)
+        let prefixStr = String(captured[..<endIndex])
+        let newLength = (prefixStr as NSString).length
+        guard newLength > 0, newLength < queryRange.length else { return nil }
+        return NSRange(location: queryRange.location, length: newLength)
+    }
+
+    /// Aligned with `InlineStationTokenView.originalIndex` — maps folded-prefix length to `String.Index` in `s`.
+    private func stationOriginalIndex(afterFoldedPrefixLength n: Int, in s: String) -> String.Index {
+        guard n > 0 else { return s.startIndex }
+        let fullFolded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        guard n <= fullFolded.count else { return s.endIndex }
+        let targetPrefix = String(fullFolded.prefix(n))
+        var end = s.startIndex
+        while end < s.endIndex {
+            let next = s.index(after: end)
+            let sub = String(s[..<next])
+            let subFolded = sub.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            if subFolded.count >= n, String(subFolded.prefix(n)) == targetPrefix {
+                return next
+            }
+            end = next
+        }
+        return s.endIndex
+    }
+
+}
+
+private extension String {
+    /// Leading whitespace only (unlike `trimmingCharacters(in: .whitespacesAndNewlines)`), so trailing spaces
+    /// typed inside the station query stay part of the regex capture and the badge range.
+    var trimmingLeadingWhitespaceForStationQuery: String {
+        guard let i = firstIndex(where: { !$0.isWhitespace }) else { return "" }
+        return String(self[i...])
+    }
 }
 
 struct StationSearchIndex {
     static let shared = StationSearchIndex()
     private static let logger = Logger(subsystem: "xyz.floritzmaier.spellline", category: "StationSearch")
-    private let normalized: [(original: String, folded: String)]
-    private let aliases: [String: String] = [
+    private static let aliases: [String: String] = [
         "hbf": "hauptbahnhof",
         "bhf": "bahnhof"
     ]
 
+    private typealias Entry = (original: String, folded: String, expanded: String)
+
+    private let allEntries: [Entry]
+    private let fromRankedEntries: [Entry]
+    private let toRankedEntries: [Entry]
+    private let cache = NSCache<NSString, NSArray>()
+
     private init() {
         let names = Self.loadStationNames()
-        normalized = names.map { ($0, Self.fold($0)) }
-        let count = normalized.count
-        Self.logger.info("Loaded station index with \(count, privacy: .public) names")
+        let entries: [Entry] = names.map { name in
+            let folded = Self.fold(name)
+            let expanded = Self.expandAbbreviations(in: folded)
+            return (original: name, folded: folded, expanded: expanded)
+        }
+
+        allEntries = entries
+        fromRankedEntries = Self.preferredRanking(entries: entries, hint: "wien")
+        toRankedEntries = Self.preferredRanking(entries: entries, hint: "salzburg")
+
+        cache.countLimit = 512
+
+        Self.logger.info("Loaded station index with \(entries.count, privacy: .public) names")
     }
 
     func matches(for query: String, role: StationRole? = nil, limit: Int) -> [String] {
-        let q = expandAbbreviations(in: Self.fold(query))
+        let q = Self.expandAbbreviations(in: Self.fold(query))
         guard !q.isEmpty else { return [] }
 
-        var ranked = normalized
-        if let role {
-            let roleHint = role == .from ? "wien" : "salzburg"
-            ranked.sort { lhs, rhs in
-                let lhsScore = lhs.folded.contains(roleHint) ? 1 : 0
-                let rhsScore = rhs.folded.contains(roleHint) ? 1 : 0
-                return lhsScore > rhsScore
+        let cacheKey = NSString(string: "\(role?.rawValue ?? "-")|\(q)|\(limit)")
+        if let cached = cache.object(forKey: cacheKey) {
+            return cached.compactMap { $0 as? String }
+        }
+
+        let ranked = rankedEntries(for: role)
+
+        var prefix: [String] = []
+        var contains: [String] = []
+        var fuzzy: [(name: String, score: Int)] = []
+
+        for entry in ranked {
+            let value = entry.expanded
+
+            if value.hasPrefix(q) {
+                prefix.append(entry.original)
+                continue
+            }
+
+            if value.contains(q) {
+                contains.append(entry.original)
+                continue
+            }
+
+            let score = Self.fuzzyScore(query: q, candidate: value)
+            if score > 0 {
+                fuzzy.append((entry.original, score))
             }
         }
 
-        let prefix = ranked
-            .filter { expandAbbreviations(in: $0.folded).hasPrefix(q) }
-            .map(\.original)
-
-        if prefix.count >= limit {
-            let result = Array(prefix.prefix(limit))
-            Self.logger.debug("Prefix station match query='\(query, privacy: .public)' role='\(role?.rawValue ?? "-", privacy: .public)' count=\(result.count, privacy: .public)")
-            return result
+        fuzzy.sort {
+            if $0.score == $1.score {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.score > $1.score
         }
 
-        let contains = ranked
-            .filter {
-                let value = expandAbbreviations(in: $0.folded)
-                return value.contains(q) && !value.hasPrefix(q)
-            }
-            .map(\.original)
+        let result = Array((prefix + contains + fuzzy.map(\.name)).prefix(limit))
+        cache.setObject(result as NSArray, forKey: cacheKey)
 
-        let fuzzy = ranked
-            .compactMap { entry -> (name: String, score: Int)? in
-                let value = expandAbbreviations(in: entry.folded)
-                if value.hasPrefix(q) || value.contains(q) {
-                    return nil
-                }
-                let score = Self.fuzzyScore(query: q, candidate: value)
-                guard score > 0 else { return nil }
-                return (entry.original, score)
-            }
-            .sorted {
-                if $0.score == $1.score {
-                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                }
-                return $0.score > $1.score
-            }
-            .map(\.name)
-
-        let result = Array((prefix + contains + fuzzy).prefix(limit))
         Self.logger.debug("Station match query='\(query, privacy: .public)' role='\(role?.rawValue ?? "-", privacy: .public)' count=\(result.count, privacy: .public)")
         return result
+    }
+
+    private func rankedEntries(for role: StationRole?) -> [Entry] {
+        switch role {
+        case .from:
+            return fromRankedEntries
+        case .to:
+            return toRankedEntries
+        case nil:
+            return allEntries
+        }
+    }
+
+    private static func preferredRanking(entries: [Entry], hint: String) -> [Entry] {
+        let preferred = entries.filter { $0.folded.contains(hint) }
+        let rest = entries.filter { !$0.folded.contains(hint) }
+        return preferred + rest
     }
 
     private static func fuzzyScore(query: String, candidate: String) -> Int {
@@ -528,16 +619,15 @@ struct StationSearchIndex {
 
     private static func typoPrefixScore(query: String, candidate: String) -> Int? {
         guard query.count >= 3 else { return nil }
+
         let q = Array(query)
         let candidatePrefix = Array(String(candidate.prefix(q.count)))
         guard !candidatePrefix.isEmpty else { return nil }
 
         let distance = levenshteinDistance(q, candidatePrefix)
-        guard distance <= 1 else { return nil }
+        guard distance <= 2 else { return nil }
 
-        // Lower than true subsequence/prefix hits, but enough to keep the preview badge alive
-        // while users fix a small typo (e.g. "wiee" -> "wien").
-        return 65 - distance * 12 + min(q.count, 10)
+        return 68 - distance * 14 + min(q.count, 10)
     }
 
     private static func levenshteinDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
@@ -567,10 +657,10 @@ struct StationSearchIndex {
         value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
     }
 
-    private func expandAbbreviations(in value: String) -> String {
+    private static func expandAbbreviations(in value: String) -> String {
         value
             .split(separator: " ")
-            .map { part in aliases[String(part)] ?? String(part) }
+            .map { part in Self.aliases[String(part)] ?? String(part) }
             .joined(separator: " ")
     }
 

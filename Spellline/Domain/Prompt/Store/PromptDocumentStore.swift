@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import UIKit
 
 // MARK: - Store
@@ -7,6 +8,7 @@ import UIKit
 @MainActor
 @Observable
 final class PromptDocumentStore {
+    private static let logger = Logger(subsystem: "xyz.floritzmaier.spellline", category: "PromptDocumentStore")
     var document: PromptDocument
 
     @ObservationIgnored
@@ -17,6 +19,7 @@ final class PromptDocumentStore {
     private let autoAcceptConfidence = 0.95
     private let matcher: PromptMatching
     private var pendingCaretPlainPosition: Int?
+    private var logicalCaretPlainPositionValue: Int?
 
     init(
         plainText: String = "make ogre bigger and spawn 4 each round, rotate 25° every 10s, apply ASCII filter, set background tint 0.8, flag collision warning, or try 80% at 8:00 PM",
@@ -70,6 +73,9 @@ final class PromptDocumentStore {
         let safeLen = min(plainRange.length, nsText.length - safeLoc)
         let safeRange = NSRange(location: safeLoc, length: safeLen)
         let delta = (replacementText as NSString).length - safeRange.length
+        Self.logger.debug(
+            "applyEdit plainRange=(\(plainRange.location, privacy: .public),\(plainRange.length, privacy: .public)) safeRange=(\(safeRange.location, privacy: .public),\(safeRange.length, privacy: .public)) replacement='\(replacementText, privacy: .public)' delta=\(delta, privacy: .public)"
+        )
 
         updateRejectedDismissalsForEdit(safeRange: safeRange, replacementText: replacementText, delta: delta)
 
@@ -91,9 +97,45 @@ final class PromptDocumentStore {
 
         nsText.replaceCharacters(in: safeRange, with: replacementText)
         document.plainText = nsText as String
-        pendingCaretPlainPosition = safeRange.location + (replacementText as NSString).length
+        let nextCaret = safeRange.location + (replacementText as NSString).length
+        pendingCaretPlainPosition = nextCaret
+        logicalCaretPlainPositionValue = nextCaret
+        Self.logger.debug("applyEdit nextCaret plain=\(nextCaret, privacy: .public)")
 
         rebuildDocument()
+    }
+
+    func setLogicalCaretPlainPosition(_ position: Int?) {
+        guard let position else {
+            logicalCaretPlainPositionValue = nil
+            Self.logger.debug("setLogicalCaretPlainPosition cleared")
+            return
+        }
+
+        let length = (document.plainText as NSString).length
+        logicalCaretPlainPositionValue = max(0, min(position, length))
+        Self.logger.debug("setLogicalCaretPlainPosition requested=\(position, privacy: .public) stored=\(self.logicalCaretPlainPositionValue ?? -1, privacy: .public)")
+    }
+
+    func clearLogicalCaretPlainPosition() {
+        logicalCaretPlainPositionValue = nil
+        Self.logger.debug("clearLogicalCaretPlainPosition")
+    }
+
+    func clearPendingCaretPlainPosition() {
+        pendingCaretPlainPosition = nil
+        Self.logger.debug("clearPendingCaretPlainPosition")
+    }
+
+    func logicalCaretPlainPosition(in token: InlineToken) -> Int {
+        let start = token.plainRange.location
+        let end = token.plainRange.upperBound
+        let raw = logicalCaretPlainPositionValue ?? end
+        return max(start, min(raw, end))
+    }
+
+    func hasLogicalCaretPlainPosition() -> Bool {
+        logicalCaretPlainPositionValue != nil
     }
 
     func rebuildDocument() {
@@ -130,6 +172,9 @@ final class PromptDocumentStore {
     }
 
     func buildSnapshot(metrics: LayoutMetrics) {
+        Self.logger.debug(
+            "buildSnapshot textLength=\((self.document.plainText as NSString).length, privacy: .public) tokenCount=\(self.document.tokens.count, privacy: .public) pendingCaret=\(self.pendingCaretPlainPosition ?? -1, privacy: .public) logicalCaret=\(self.logicalCaretPlainPositionValue ?? -1, privacy: .public)"
+        )
         let plainText = document.plainText
         let nsPlain = plainText as NSString
         let tokens = document.tokens.sorted { $0.plainRange.location < $1.plainRange.location }
@@ -178,15 +223,43 @@ final class PromptDocumentStore {
             }
 
             let tokenSize = InlineTokenSizing.size(for: token, metrics: metrics)
-            let spacerString = InlineSpacerRun.make(width: tokenSize.width, font: editorFont, paragraphStyle: paragraphStyle)
-            result.append(spacerString)
 
-            tokenHits[storageCursor] = token.id
+            let tokenAttributed: NSAttributedString
+            let storageLength: Int
+            var stationLeadingPaddingLength = 0
+            var stationTrailingPaddingLength = 0
+            if token.kind == .station {
+                let stationPlain = nsPlain.substring(with: token.plainRange)
+                Self.logger.debug(
+                    "buildSnapshot station token id=\(token.id.uuidString, privacy: .public) plain='\(stationPlain, privacy: .public)' matched='\(token.matchedText, privacy: .public)' label='\(token.label, privacy: .public)' tokenSize=\(Int(tokenSize.width), privacy: .public)x\(Int(tokenSize.height), privacy: .public)"
+                )
+                let stationRun = InlineStationStorage.renderedRun(
+                    plainSubstring: stationPlain,
+                    targetWidth: tokenSize.width,
+                    font: metrics.inlineBadgeFont,
+                    paragraphStyle: paragraphStyle
+                )
+                tokenAttributed = stationRun.attributedString
+                storageLength = (tokenAttributed.string as NSString).length
+                stationLeadingPaddingLength = stationRun.leadingPaddingUTF16Length
+                stationTrailingPaddingLength = stationRun.trailingPaddingUTF16Length
+            } else {
+                tokenAttributed = InlineSpacerRun.make(width: tokenSize.width, font: editorFont, paragraphStyle: paragraphStyle)
+                storageLength = 1
+            }
+
+            result.append(tokenAttributed)
+
+            for offset in 0..<storageLength {
+                tokenHits[storageCursor + offset] = token.id
+            }
             rangeMap.append(
                 RangeMapEntry(
-                    storageRange: NSRange(location: storageCursor, length: 1),
+                    storageRange: NSRange(location: storageCursor, length: storageLength),
                     plainRange: token.plainRange,
-                    tokenID: token.id
+                    tokenID: token.id,
+                    storageLeadingPaddingLength: stationLeadingPaddingLength,
+                    storageTrailingPaddingLength: stationTrailingPaddingLength
                 )
             )
 
@@ -194,11 +267,13 @@ final class PromptDocumentStore {
                 InlineTokenPresentation(
                     token: token,
                     storageLocation: storageCursor,
-                    size: tokenSize
+                    storageLength: storageLength,
+                    size: tokenSize,
+                    stationCaretLeadingTextWidth: nil
                 )
             )
 
-            storageCursor += 1
+            storageCursor += storageLength
             plainCursor = tokenEnd
         }
 
@@ -224,19 +299,32 @@ final class PromptDocumentStore {
             tokenHits: tokenHits,
             presentations: presentations,
             totalStorageLength: storageCursor,
-            caretStoragePosition: nil
+            caretStoragePosition: nil,
+            hidesSystemCaretForStationEditing: false
         )
 
         if let caretPlain = pendingCaretPlainPosition {
             newSnapshot.caretStoragePosition = newSnapshot.mapPlainPositionToStorage(caretPlain)
+            Self.logger.debug("buildSnapshot pending caret plain=\(caretPlain, privacy: .public) -> storage=\(newSnapshot.caretStoragePosition ?? -1, privacy: .public)")
             pendingCaretPlainPosition = nil
         }
 
+        // Forward typing: `pendingCaretPlainPosition` is only set on `applyEdit`. A second `buildSnapshot`
+        // (e.g. SwiftUI `updateUIView` after `renderSignature` changes) would otherwise leave
+        // `caretStoragePosition` nil, `updateUIView` corrupts `selectedRange`, and `textViewDidChangeSelection`
+        // clears the logical caret — hiding the in-badge caret while the system caret stays wrong.
+        if newSnapshot.caretStoragePosition == nil, let lc = logicalCaretPlainPositionValue {
+            newSnapshot.caretStoragePosition = newSnapshot.mapPlainPositionToStorage(lc)
+            Self.logger.debug("buildSnapshot logical caret plain=\(lc, privacy: .public) -> storage=\(newSnapshot.caretStoragePosition ?? -1, privacy: .public)")
+        }
+
         snapshot = newSnapshot
+        Self.logger.debug("buildSnapshot complete totalStorageLength=\(self.snapshot.totalStorageLength, privacy: .public) caretStorage=\(self.snapshot.caretStoragePosition ?? -1, privacy: .public)")
     }
 
     func updateTokenValue(id: UUID, value: CheatValue) {
         guard let index = document.tokens.firstIndex(where: { $0.id == id }) else { return }
+        Self.logger.debug("updateTokenValue id=\(id.uuidString, privacy: .public)")
 
         let token = document.tokens[index]
         guard token.plainRange.location != NSNotFound else { return }
@@ -265,7 +353,9 @@ final class PromptDocumentStore {
             }
         }
 
-        pendingCaretPlainPosition = document.tokens[index].plainRange.location + document.tokens[index].plainRange.length
+        let nextCaret = document.tokens[index].plainRange.location + document.tokens[index].plainRange.length
+        pendingCaretPlainPosition = nextCaret
+        logicalCaretPlainPositionValue = nextCaret
         rebuildDocument()
     }
 
@@ -273,6 +363,7 @@ final class PromptDocumentStore {
         guard let token = document.tokens.first(where: { $0.id == id }) else { return }
         rejectedDismissals[dismissalKey(semanticKey: token.semanticKey, matchedText: token.matchedText)] = token.plainRange
         pendingCaretPlainPosition = token.plainRange.upperBound
+        logicalCaretPlainPositionValue = nil
         document.tokens.removeAll { $0.id == id }
         rebuildDocument()
     }

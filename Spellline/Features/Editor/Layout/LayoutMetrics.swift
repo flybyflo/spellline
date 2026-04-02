@@ -13,6 +13,10 @@ struct LayoutMetrics {
     var sectionSpacing: CGFloat { 16 }
     var inlineControlFontSize: CGFloat { 15.5 }
     var inlineControlHeight: CGFloat { 30 }
+    /// Same face as `InlineBadgeTypography` / station chip labels (not `editorTextSize`).
+    var inlineBadgeFont: UIFont {
+        UIFont.systemFont(ofSize: inlineControlFontSize, weight: .bold)
+    }
     /// Positive = move chips down to align optically with editor text (line-center reads a bit high).
     var inlineTokenVerticalNudge: CGFloat { 5 }
     var inlineIconSize: CGFloat { 15 }

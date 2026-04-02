@@ -393,6 +393,9 @@ class InlineTokenControlView: UIView {
         self.token = token
     }
 
+    /// Station badges use this to position the in-badge caret; default is no-op.
+    func applyStationCaretPresentation(leadingTextWidth: CGFloat?) {}
+
     func setFocus(_ focused: Bool, animated: Bool) {
         let alpha: CGFloat = focused ? 1 : 0.92
         let scale: CGFloat = focused ? 1 : 0.985
@@ -885,11 +888,15 @@ private final class InlineStationTokenView: InlineTokenControlView {
     private let capsule = GlassCapsuleContainerView()
     private let iconView = UIImageView()
     private let menuButton = UIButton(type: .system)
+
     private let typedLabel = UILabel()
-    private let cursorLabel = UILabel()
+    private let typoLabel = UILabel()
     private let predictedLabel = UILabel()
     private let labelStack = UIStackView()
-    private var isCaretFocused = false
+    /// Drawn at the logical caret position (system caret can’t sit inside the spacer glyph).
+    private let caretLine = UIView()
+
+    private var stationCaretLeadingTextWidth: CGFloat?
 
     override init(
         token: InlineToken,
@@ -904,31 +911,34 @@ private final class InlineStationTokenView: InlineTokenControlView {
         capsule.addSubview(iconView)
         capsule.addSubview(labelStack)
         capsule.addSubview(menuButton)
+        capsule.addSubview(caretLine)
+
+        caretLine.layer.cornerRadius = 1
+        caretLine.layer.masksToBounds = true
 
         labelStack.axis = .horizontal
         labelStack.alignment = .center
-        labelStack.spacing = 3
+        labelStack.spacing = 1
         labelStack.isUserInteractionEnabled = false
+
         labelStack.addArrangedSubview(typedLabel)
-        labelStack.addArrangedSubview(cursorLabel)
+        labelStack.addArrangedSubview(typoLabel)
         labelStack.addArrangedSubview(predictedLabel)
-        labelStack.setCustomSpacing(4, after: cursorLabel)
+        labelStack.setCustomSpacing(1, after: typoLabel)
 
         typedLabel.font = InlineBadgeTypography.badgeFont(metrics: metrics)
-        predictedLabel.font = UIFont.systemFont(ofSize: max(12, metrics.inlineControlFontSize - 1), weight: .bold)
-        cursorLabel.font = UIFont.monospacedSystemFont(ofSize: max(10, metrics.inlineControlFontSize - 5), weight: .semibold)
-        cursorLabel.text = "│"
-        cursorLabel.textAlignment = .center
-        cursorLabel.layer.cornerRadius = 5
-        cursorLabel.layer.masksToBounds = true
-        cursorLabel.setContentHuggingPriority(.required, for: .horizontal)
-        cursorLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        cursorLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            cursorLabel.widthAnchor.constraint(equalToConstant: max(8, metrics.inlineControlFontSize - 5))
-        ])
+        typoLabel.font = InlineBadgeTypography.badgeFont(metrics: metrics)
+        predictedLabel.font = InlineBadgeTypography.badgeFont(metrics: metrics)
+
         typedLabel.lineBreakMode = .byClipping
+        typoLabel.lineBreakMode = .byClipping
         predictedLabel.lineBreakMode = .byTruncatingTail
+
+        // Keep typed + typo from shrinking before ghost completion; equal default CR made `byClipping` hide leading glyphs.
+        typedLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        typoLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        predictedLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        predictedLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         menuButton.showsMenuAsPrimaryAction = true
         menuButton.contentHorizontalAlignment = .left
@@ -959,7 +969,28 @@ private final class InlineStationTokenView: InlineTokenControlView {
             width: max(0, inner.maxX - inner.minX - iconSide - gap),
             height: inner.height
         )
+
         labelStack.frame = menuButton.frame
+
+        layoutCaretLine(menuFrame: menuButton.frame)
+    }
+
+    private func layoutCaretLine(menuFrame: CGRect) {
+        guard let leading = stationCaretLeadingTextWidth else {
+            caretLine.isHidden = true
+            return
+        }
+        caretLine.isHidden = false
+        caretLine.backgroundColor = token.uiTint.withAlphaComponent(0.95)
+        let w: CGFloat = 3
+        let h = min(menuFrame.height * 0.92, max(16, metrics.inlineControlFontSize + 4))
+        let x = menuFrame.minX + leading
+        caretLine.frame = CGRect(x: x, y: menuFrame.midY - h / 2, width: w, height: h)
+    }
+
+    override func applyStationCaretPresentation(leadingTextWidth: CGFloat?) {
+        stationCaretLeadingTextWidth = leadingTextWidth
+        setNeedsLayout()
     }
 
     override func update(token: InlineToken, metrics: LayoutMetrics, animated: Bool) {
@@ -968,6 +999,7 @@ private final class InlineStationTokenView: InlineTokenControlView {
         capsule.updateGlass(tint: token.uiTint)
         capsule.layer.borderWidth = 1
         capsule.layer.borderColor = token.uiTint.withAlphaComponent(0.22).cgColor
+
         iconView.image = UIImage(systemName: token.iconName)
         iconView.tintColor = token.uiTint
 
@@ -978,27 +1010,48 @@ private final class InlineStationTokenView: InlineTokenControlView {
         menuButton.configuration = config
 
         let display = stationDisplayParts()
-        typedLabel.text = display.typed
+
+        typedLabel.text = display.confirmed
         typedLabel.textColor = token.uiTint.withAlphaComponent(0.95)
+
+        typoLabel.text = display.typos
+        typoLabel.textColor = display.typos.isEmpty
+            ? .clear
+            : UIColor.systemRed.withAlphaComponent(0.95)
+
         predictedLabel.text = display.predicted
         predictedLabel.textColor = token.uiTint.withAlphaComponent(0.45)
-        applyCursorStyling(tint: token.uiTint)
 
         configureMenu()
     }
 
-    override func setFocus(_ focused: Bool, animated: Bool) {
-        super.setFocus(focused, animated: animated)
-        isCaretFocused = focused
-        applyCursorStyling(tint: token.uiTint)
+    private func configureMenu() {
+        guard case .station(let role, _) = token.value else { return }
+
+        menuButton.menu = UIMenu(
+            title: role == .from ? "From station" : "To station",
+            image: UIImage(systemName: token.iconName),
+            children: [
+                UIDeferredMenuElement { [weak self] completion in
+                    completion(self?.stationMenuActions() ?? [])
+                }
+            ]
+        )
     }
 
-    private func configureMenu() {
-        guard case .station(let role, let currentName) = token.value else { return }
+    private func stationMenuActions() -> [UIMenuElement] {
+        guard case .station(let role, let currentName) = token.value else { return [] }
+
         let typed = token.matchedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidates = StationSearchIndex.shared.matches(for: typed.isEmpty ? currentName : typed, role: role, limit: 24)
+        let candidates = StationSearchIndex.shared.matches(
+            for: typed.isEmpty ? currentName : typed,
+            role: role,
+            limit: 24
+        )
+
         let options = candidates.isEmpty ? [currentName] : candidates
-        let actions = options.map { station -> UIAction in
+
+        return options.map { station in
             UIAction(
                 title: station,
                 state: station.caseInsensitiveCompare(currentName) == .orderedSame ? .on : .off
@@ -1008,40 +1061,90 @@ private final class InlineStationTokenView: InlineTokenControlView {
                 self.onUpdate(self.token.id, .station(role: role, name: station))
             }
         }
-
-        menuButton.menu = UIMenu(
-            title: role == .from ? "From station" : "To station",
-            image: UIImage(systemName: token.iconName),
-            options: [.singleSelection],
-            children: actions
-        )
     }
 
-    private func stationDisplayParts() -> (typed: String, predicted: String) {
-        guard case .station(_, let resolved) = token.value else { return (token.label, "") }
-        let typed = token.matchedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !typed.isEmpty else { return ("", resolved) }
-
-        let foldedTyped = typed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        let foldedResolved = resolved.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-        if foldedResolved.hasPrefix(foldedTyped) {
-            let splitIndex = resolved.index(resolved.startIndex, offsetBy: min(typed.count, resolved.count))
-            return (String(resolved[..<splitIndex]), String(resolved[splitIndex...]))
+    private func stationDisplayParts() -> (confirmed: String, typos: String, predicted: String) {
+        guard case .station(_, let resolved) = token.value else {
+            return (token.label, "", "")
         }
-        return (typed, resolved.caseInsensitiveCompare(typed) == .orderedSame ? "" : " → \(resolved)")
+
+        // Do not trim trailing spaces — a space after "amstetten" must stay in the badge or the caret looks wrong.
+        let typed = token.matchedText.stationLeadingTrimmedWhitespace
+        guard !typed.isEmpty else {
+            return ("", "", resolved)
+        }
+
+        let foldedResolvedChars = Array(
+            resolved.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        )
+        let foldedTypedChars = Array(
+            typed.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        )
+
+        var foldedPrefixLength = 0
+        while foldedPrefixLength < min(foldedResolvedChars.count, foldedTypedChars.count),
+              foldedResolvedChars[foldedPrefixLength] == foldedTypedChars[foldedPrefixLength] {
+            foldedPrefixLength += 1
+        }
+
+        // Once the user has matched the full resolved station name (folded), extra keystrokes are not "typos"
+        // vs prediction — e.g. trailing spaces before space-to-commit, or paste — show as normal confirmed text.
+        if foldedPrefixLength >= foldedResolvedChars.count, !foldedResolvedChars.isEmpty {
+            return (typed, "", "")
+        }
+
+        // `foldedPrefixLength` is in *folded* character space. Slicing `typed`/`resolved` by the same integer
+        // is wrong when folding changes character count (case/diacritics/Unicode). Map n → original indices.
+        let typedPrefixEnd = Self.originalIndex(afterFoldedPrefixLength: foldedPrefixLength, in: typed)
+        let confirmedBase = String(typed[..<typedPrefixEnd])
+
+        // After backspacing, spaces often sit in the "remainder" after the resolved prefix match.
+        // If we put them in `typoLabel` (red), they are invisible but still take width → huge gap before the cursor.
+        let remainder = String(typed[typedPrefixEnd...])
+        let leadingSpaces = remainder.prefix(while: { $0.isWhitespace })
+        let afterSpaces = remainder.dropFirst(leadingSpaces.count)
+        let typos = String(afterSpaces.prefix(2))
+        let confirmed = confirmedBase + leadingSpaces
+
+        let resolvedSplit = Self.originalIndex(afterFoldedPrefixLength: foldedPrefixLength, in: resolved)
+        let predicted = String(resolved[resolvedSplit...])
+
+        return (confirmed, typos, predicted)
     }
 
-    private func applyCursorStyling(tint: UIColor) {
-        cursorLabel.isHidden = !isCaretFocused
-        cursorLabel.textColor = tint.withAlphaComponent(isCaretFocused ? 0.92 : 0.5)
-        cursorLabel.backgroundColor = tint.withAlphaComponent(isCaretFocused ? 0.18 : 0.1)
+    /// Smallest end index in `s` such that the folded form of `s[..<end]` has at least `n` folded characters
+    /// matching the prefix of `s.folding(...)` (aligned with common-prefix logic in folded character arrays).
+    private static func originalIndex(afterFoldedPrefixLength n: Int, in s: String) -> String.Index {
+        guard n > 0 else { return s.startIndex }
+        let fullFolded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        guard n <= fullFolded.count else { return s.endIndex }
+        let targetPrefix = String(fullFolded.prefix(n))
+        var end = s.startIndex
+        while end < s.endIndex {
+            let next = s.index(after: end)
+            let sub = String(s[..<next])
+            let subFolded = sub.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            if subFolded.count >= n, String(subFolded.prefix(n)) == targetPrefix {
+                return next
+            }
+            end = next
+        }
+        return s.endIndex
+    }
+}
+
+private extension String {
+    /// Trims only leading whitespace so trailing spaces (e.g. after a word inside the station badge) stay visible.
+    var stationLeadingTrimmedWhitespace: String {
+        guard let i = firstIndex(where: { !$0.isWhitespace }) else { return "" }
+        return String(self[i...])
     }
 }
 
 /// Single source for inline badge character size and weight (steppers, tags, S/B segments, %, etc.).
 private enum InlineBadgeTypography {
     static func badgeFont(metrics: LayoutMetrics) -> UIFont {
-        UIFont.systemFont(ofSize: metrics.inlineControlFontSize, weight: .bold)
+        metrics.inlineBadgeFont
     }
 }
 
